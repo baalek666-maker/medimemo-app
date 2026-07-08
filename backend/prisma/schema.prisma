@@ -11,10 +11,12 @@ model User {
   id        String   @id @default(cuid())
   email     String   @unique
   name      String?
+  isPremium Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   medications Medication[]
+  caregivers  Caregiver[]
 }
 
 model Medication {
@@ -23,6 +25,24 @@ model Medication {
   name      String
   dose      String
   time      String
+  taken     Boolean  @default(false)
+  takenAt   DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+model Caregiver {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  phone     String?
+  email     String?
+  notifySms Boolean  @default(false)
+  notifyEmail Boolean @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
