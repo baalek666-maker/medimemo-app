@@ -183,3 +183,58 @@ export async function getResidentDetail(id: string) {
   if (!res.ok) throw new Error('Failed to load resident')
   return res.json()
 }
+
+// === REFERRAL ===
+export async function getMyReferral(token: string) {
+  const res = await fetch(`${API_URL}/api/referral/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) throw new Error('Failed to load referral')
+  return res.json()
+}
+
+export async function applyReferralCode(code: string, userId: string) {
+  const res = await fetch(`${API_URL}/api/referral/apply`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code, userId }),
+  })
+  if (!res.ok) throw new Error('Failed to apply referral code')
+  return res.json()
+}
+
+// === AFFILIATE ===
+export async function registerAffiliate(token: string) {
+  const res = await fetch(`${API_URL}/api/referral/affiliate/register`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) throw new Error('Failed to register as affiliate')
+  return res.json()
+}
+
+export async function getAffiliateDashboard(token: string) {
+  const res = await fetch(`${API_URL}/api/referral/affiliate/dashboard`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) throw new Error('Failed to load affiliate dashboard')
+  return res.json()
+}
+
+// === GAMIFICATION ===
+export async function getBadges(token: string) {
+  const res = await fetch(`${API_URL}/api/referral/badges`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) throw new Error('Failed to load badges')
+  return res.json()
+}
+
+export async function updateStreak(token: string) {
+  const res = await fetch(`${API_URL}/api/referral/streak/update`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) throw new Error('Failed to update streak')
+  return res.json()
+}

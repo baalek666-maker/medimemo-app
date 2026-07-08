@@ -56,7 +56,7 @@ export async function createCheckoutSession(userId: string, userEmail: string) {
 
 import { sendPremiumConfirmationEmail } from './email'
 
-export async function handleStripeWebhook(event: Stripe.Event) {
+export async function handleStripeWebhook(event: Stripe.Event): Promise<{ userId?: string }> {
   switch (event.type) {
     case 'checkout.session.completed': {
       const session = event.data.object as Stripe.Checkout.Session
@@ -75,6 +75,7 @@ export async function handleStripeWebhook(event: Stripe.Event) {
         if (updated.email) {
           sendPremiumConfirmationEmail(updated.email, updated.name || '').catch(console.error)
         }
+        return { userId }
       }
       break
     }
@@ -87,6 +88,7 @@ export async function handleStripeWebhook(event: Stripe.Event) {
       break
     }
   }
+  return {}
 }
 
 export async function getSubscriptionStatus(userId: string) {

@@ -3,6 +3,9 @@ import { Home, Plus, User, ChevronRight, Shield, Heart, Search, Trash2, Users, C
 import * as api from './api'
 import { track, identifyUser, resetAnalytics } from './analytics'
 import { EhpadLanding, EhpadDashboard } from './Ehpad'
+import Referral from './Referral'
+import { LandingPageView, SEO_PAGES } from './LandingPages'
+import { getLandingCta } from './experiments'
 import jsPDF from 'jspdf'
 
 interface Medication {
@@ -36,7 +39,7 @@ interface UserData {
   premiumUntil?: string
 }
 
-type Screen = 'home' | 'add' | 'premium' | 'caregiver' | 'report' | 'landing' | 'signup' | 'login' | 'ehpad' | 'ehpad-demo'
+type Screen = 'home' | 'add' | 'premium' | 'caregiver' | 'report' | 'landing' | 'signup' | 'login' | 'ehpad' | 'ehpad-demo' | 'referral'
 
 function App() {
   const [screen, setScreen] = useState<Screen>('landing')
@@ -46,13 +49,20 @@ function App() {
   const [caregivers, setCaregivers] = useState<Caregiver[]>([])
   const [loading, setLoading] = useState(false)
   const [notificationStatus, setNotificationStatus] = useState<'default' | 'granted' | 'denied'>('default')
+  const [seoSlug, setSeoSlug] = useState<string | null>(null)
 
   // Init : check if user exists in localStorage
   useEffect(() => {
     const storedToken = localStorage.getItem('medimemo_token')
     const storedUserId = localStorage.getItem('medimemo_userId')
     const url = new URL(window.location.href)
-    if (url.searchParams.get('premium') === 'success') {
+    // Check if URL matches a SEO landing page
+    const path = url.pathname.replace(/^\//, '').replace(/\/$/, '')
+    const seoPage = SEO_PAGES.find((p) => p.slug === path)
+    if (seoPage) {
+      setScreen('landing' as any) // will be handled below
+      setSeoSlug(path)
+    } else if (url.searchParams.get('premium') === 'success') {
       if (storedUserId) {
         setUserId(storedUserId)
         loadUser(storedUserId)
@@ -185,6 +195,14 @@ function App() {
     return <EhpadDashboard onBack={() => setScreen('ehpad')} />
   }
 
+  if (seoSlug) {
+    return <LandingPageView slug={seoSlug} onSignup={() => { setSeoSlug(null); setScreen('signup') }} />
+  }
+
+  if (screen === 'referral') {
+    return <Referral token={localStorage.getItem('medimemo_token') || ''} onClose={() => setScreen('home')} />
+  }
+
   // === Signup Screen ===
   if (screen === 'signup') {
     return <SignupScreen onSubmit={handleSignup} onBack={() => setScreen('landing')} loading={loading} />
@@ -216,6 +234,9 @@ function App() {
             {user?.isPremium && (
               <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-1 rounded-full">PREMIUM</span>
             )}
+            <button onClick={() => setScreen('referral')} className="text-sm font-semibold text-purple-600 bg-purple-50 px-3 py-1.5 rounded-full">
+              🎁 Parrainer
+            </button>
             <button onClick={() => { track('premium_viewed'); setScreen('premium') }} className="text-sm font-semibold text-primary-600 bg-primary-50 px-3 py-1.5 rounded-full">
               {user?.isPremium ? 'Mon compte' : 'Premium'}
             </button>
@@ -358,7 +379,7 @@ function LandingScreen({ onSignup, onLogin, onEhpad }: { onSignup: () => void; o
         </div>
 
         <button onClick={onSignup} className="btn-primary w-full text-lg mb-3">
-          Commencer gratuitement
+          {getLandingCta()}
         </button>
         <p className="text-center text-slate-500 text-sm mb-3">
           Sans engagement · 7 jours gratuits Premium

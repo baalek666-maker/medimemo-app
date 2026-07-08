@@ -17,6 +17,11 @@ model User {
   stripeCustomerId String?
   stripeSubId     String?
   notificationsEnabled Boolean @default(false)
+  referralCode    String? @unique
+  referredByCode  String?
+  loyaltyPoints   Int      @default(0)
+  streakDays      Int      @default(0)
+  lastTakenDate   DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -24,6 +29,91 @@ model User {
   caregivers  Caregiver[]
   notificationLogs NotificationLog[]
   pushSubscriptions PushSubscription[]
+  referralsMade    Referral[]    @relation("Referrer")
+  referralsReceived Referral[]   @relation("Referred")
+  badges           UserBadge[]
+}
+
+model Referral {
+  id            String   @id @default(cuid())
+  referrerId    String
+  referredId    String
+  code          String
+  status        String   @default("pending") // pending → converted → rewarded
+  rewardGiven   Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  convertedAt   DateTime?
+
+  referrer User @relation("Referrer", fields: [referrerId], references: [id])
+  referred User @relation("Referred", fields: [referredId], references: [id])
+
+  @@index([referrerId])
+  @@index([referredId])
+}
+
+model Affiliate {
+  id            String   @id @default(cuid())
+  userId        String
+  affiliateCode String   @unique
+  clickCount    Int      @default(0)
+  signupCount   Int      @default(0)
+  paidCount     Int      @default(0)
+  totalEarnings Float    @default(0)
+  pendingEarnings Float  @default(0)
+  payoutEmail   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  clicks  AffiliateClick[]
+  conversions AffiliateConversion[]
+}
+
+model AffiliateClick {
+  id           String   @id @default(cuid())
+  affiliateId  String
+  ipHash       String?
+  userAgent    String?
+  createdAt    DateTime @default(now())
+
+  affiliate Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  @@index([affiliateId])
+}
+
+model AffiliateConversion {
+  id           String   @id @default(cuid())
+  affiliateId  String
+  userId       String
+  amount       Float    // commission for this conversion
+  status       String   @default("pending") // pending → paid
+  createdAt    DateTime @default(now())
+  paidAt       DateTime?
+
+  affiliate Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  @@index([affiliateId])
+}
+
+model Badge {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String
+  icon        String   // emoji
+  threshold   Int      // points or days needed
+  type        String   @default("streak") // streak, points, special
+
+  users UserBadge[]
+}
+
+model UserBadge {
+  id        String   @id @default(cuid())
+  userId    String
+  badgeId   String
+  earnedAt  DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge Badge @relation(fields: [badgeId], references: [id])
+
+  @@unique([userId, badgeId])
 }
 
 model PushSubscription {

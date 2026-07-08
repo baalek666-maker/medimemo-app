@@ -14,6 +14,7 @@ import { saveSubscription, removeSubscription, sendPushToUser, vapidPublicKey } 
 import { sendWelcomeEmail, sendPremiumConfirmationEmail } from './email'
 import { getEhpadDashboard, getResidentDetail } from './ehpad'
 import { trackServer } from './analytics'
+import referralRouter, { processReferralConversion } from './referral'
 
 const app = express()
 const prisma = new PrismaClient()
@@ -23,7 +24,11 @@ const PORT = process.env.PORT || 3001
 app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   try {
     const event = JSON.parse(req.body.toString())
-    await handleStripeWebhook(event as any)
+    const result = await handleStripeWebhook(event as any) as any
+    // Process referral conversion if a user upgraded to premium
+    if (result?.userId) {
+      await processReferralConversion(result.userId)
+    }
     res.json({ received: true })
   } catch (error) {
     console.error('Webhook error:', error)
@@ -33,6 +38,9 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
 
 app.use(cors())
 app.use(express.json())
+
+// Referral + affiliate + gamification routes
+app.use('/api/referral', referralRouter)
 
 // Base de médicaments française (les 60 plus courants)
 const frenchMedications = [
