@@ -10,6 +10,7 @@ import Paywall from './Paywall'
 import Settings from './Settings'
 import AdminDashboard from './AdminDashboard'
 import { AdminLogin } from './AdminLogin'
+import { LegalPage } from './Legal'
 import { getLandingCta } from './experiments'
 import jsPDF from 'jspdf'
 
@@ -44,7 +45,7 @@ interface UserData {
   premiumUntil?: string
 }
 
-type Screen = 'home' | 'add' | 'premium' | 'caregiver' | 'report' | 'landing' | 'signup' | 'login' | 'ehpad' | 'ehpad-demo' | 'referral' | 'onboarding' | 'settings' | 'admin'
+type Screen = 'home' | 'add' | 'premium' | 'caregiver' | 'report' | 'landing' | 'signup' | 'login' | 'ehpad' | 'ehpad-demo' | 'referral' | 'onboarding' | 'settings' | 'admin' | 'legal'
 
 function App() {
   // Admin dashboard: détecté par l'URL /admin
@@ -64,6 +65,7 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [notificationStatus, setNotificationStatus] = useState<'default' | 'granted' | 'denied'>('default')
   const [seoSlug, setSeoSlug] = useState<string | null>(null)
+  const [legalPage, setLegalPage] = useState<'cgv' | 'cgu' | 'mentions' | 'privacy' | 'contact'>('mentions')
 
   // Init : check if user exists in localStorage
   useEffect(() => {
@@ -210,7 +212,7 @@ function App() {
 
   // === Landing Screen ===
   if (screen === 'landing') {
-    return <LandingScreen onSignup={() => setScreen('signup')} onLogin={() => setScreen('login')} onEhpad={() => setScreen('ehpad')} />
+    return <LandingScreen onSignup={() => setScreen('signup')} onLogin={() => setScreen('login')} onEhpad={() => setScreen('ehpad')} onLegal={(p) => { setLegalPage(p); setScreen('legal') }} />
   }
 
   // === B2B EHPAD ===
@@ -240,6 +242,10 @@ function App() {
         }}
       />
     )
+  }
+
+  if (screen === 'legal') {
+    return <LegalPage page={legalPage} onBack={() => setScreen('landing')} />
   }
 
   if (screen === 'referral') {
@@ -376,7 +382,7 @@ function App() {
 }
 
 // === Landing Page ===
-function LandingScreen({ onSignup, onLogin, onEhpad }: { onSignup: () => void; onLogin: () => void; onEhpad: () => void }) {
+function LandingScreen({ onSignup, onLogin, onEhpad, onLegal }: { onSignup: () => void; onLogin: () => void; onEhpad: () => void; onLegal: (p: 'cgv' | 'cgu' | 'mentions' | 'privacy' | 'contact') => void }) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50">
       <header className="px-5 py-4 flex items-center justify-between max-w-md mx-auto">
@@ -448,7 +454,7 @@ function LandingScreen({ onSignup, onLogin, onEhpad }: { onSignup: () => void; o
 
       <footer className="px-5 py-6 text-center text-slate-400 text-xs max-w-md mx-auto">
         <button onClick={onEhpad} className="block mx-auto mb-2 text-slate-600 font-semibold underline">🏥 MediMémo pour EHPAD & Établissements</button>
-        © 2024 MediMémo · Fait en France · <a href="#" className="underline">CGU</a> · <a href="#" className="underline">Confidentialité</a>
+        © 2025 MediMémo · Fait en France · <button onClick={() => onLegal('cgu')} className="underline text-slate-400 hover:text-slate-600">CGU</button> · <button onClick={() => onLegal('cgv')} className="underline text-slate-400 hover:text-slate-600">CGV</button> · <button onClick={() => onLegal('privacy')} className="underline text-slate-400 hover:text-slate-600">Confidentialité</button> · <button onClick={() => onLegal('mentions')} className="underline text-slate-400 hover:text-slate-600">Mentions légales</button>
       </footer>
     </div>
   )

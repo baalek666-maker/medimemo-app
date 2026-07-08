@@ -1,0 +1,69 @@
+services:
+  # === Backend API ===
+  - type: web
+    name: medimemo-api
+    runtime: node
+    plan: starter
+    region: frankfurt
+    branch: main
+    rootDir: backend
+    buildCommand: npm ci && npx prisma generate
+    startCommand: npx prisma db push --skip-generate && npx ts-node src/server.ts
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: DATABASE_URL
+        fromDatabase:
+          name: medimemo-db
+          property: connectionString
+      - key: JWT_SECRET
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_PHONE_FROM
+        sync: false
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: ADMIN_TOKEN
+        sync: false
+      - key: FRONTEND_URL
+        value: https://medimemo.fr
+      - key: POSTHOG_KEY
+        sync: false
+
+  # === Frontend (static site) ===
+  - type: web
+    name: medimemo-web
+    runtime: static
+    branch: main
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    pullRequestPreviewsEnabled: false
+    envVars:
+      - key: VITE_API_URL
+        value: https://medimemo-api.onrender.com
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+# === Database ===
+databases:
+  - name: medimemo-db
+    databaseName: medimemo
+    region: frankfurt
+    plan: starter
