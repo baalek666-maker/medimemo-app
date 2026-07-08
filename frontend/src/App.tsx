@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
-import { Home, Plus, User, ChevronRight, Shield, Heart, Smartphone, Search, Trash2, Users, Check, ChevronLeft, Bell, FileText, LogOut, Mail, Lock, Download } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Home, Plus, User, ChevronRight, Shield, Heart, Search, Trash2, Users, Check, ChevronLeft, Bell, FileText, LogOut, Lock, Download } from 'lucide-react'
 import * as api from './api'
 import jsPDF from 'jspdf'
 
@@ -34,7 +34,7 @@ interface UserData {
   premiumUntil?: string
 }
 
-type Screen = 'home' | 'add' | 'premium' | 'caregiver' | 'report' | 'landing' | 'signup'
+type Screen = 'home' | 'add' | 'premium' | 'caregiver' | 'report' | 'landing' | 'signup' | 'login'
 
 function App() {
   const [screen, setScreen] = useState<Screen>('landing')
@@ -47,18 +47,18 @@ function App() {
 
   // Init : check if user exists in localStorage
   useEffect(() => {
-    const stored = localStorage.getItem('medimemo_userId')
+    const storedToken = localStorage.getItem('medimemo_token')
+    const storedUserId = localStorage.getItem('medimemo_userId')
     const url = new URL(window.location.href)
     if (url.searchParams.get('premium') === 'success') {
-      // Coming back from Stripe success
-      if (stored) {
-        setUserId(stored)
-        loadUser(stored)
+      if (storedUserId) {
+        setUserId(storedUserId)
+        loadUser(storedUserId)
         setScreen('home')
       }
-    } else if (stored) {
-      setUserId(stored)
-      loadUser(stored)
+    } else if (storedUserId && storedToken) {
+      setUserId(storedUserId)
+        loadUser(storedUserId)
       setScreen('home')
     } else {
       setScreen('landing')
@@ -83,25 +83,42 @@ function App() {
     }
   }
 
-  const handleSignup = async (email: string, name: string) => {
+  const handleAuthSuccess = async (authData: { user: any; token: string }) => {
+    localStorage.setItem('medimemo_token', authData.token)
+    localStorage.setItem('medimemo_userId', authData.user.id)
+    setUserId(authData.user.id)
+    setUser({ id: authData.user.id, email: authData.user.email, name: authData.user.name, isPremium: authData.user.isPremium })
+    setScreen('home')
+    requestNotificationPermission()
+    subscribeToPush(authData.token)
+  }
+
+  const handleLogin = async (email: string, password: string) => {
     setLoading(true)
     try {
-      const newUser = await api.createUser(email, name) as any
-      localStorage.setItem('medimemo_userId', newUser.id)
-      setUserId(newUser.id)
-      setUser({ id: newUser.id, email: newUser.email, name: newUser.name, isPremium: newUser.isPremium })
-      setScreen('home')
-      // Demande la permission pour les notifications
-      requestNotificationPermission()
-    } catch (e) {
-      console.error(e)
-      alert("Erreur lors de la création du compte")
+      const authData = await api.authLogin(email, password)
+      await handleAuthSuccess(authData)
+    } catch (e: any) {
+      alert(e.message || 'Erreur de connexion')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSignup = async (email: string, password: string, name: string) => {
+    setLoading(true)
+    try {
+      const authData = await api.authSignup(email, password, name)
+      await handleAuthSuccess(authData)
+    } catch (e: any) {
+      alert(e.message || 'Erreur lors de la création du compte')
     } finally {
       setLoading(false)
     }
   }
 
   const handleLogout = () => {
+    localStorage.removeItem('medimemo_token')
     localStorage.removeItem('medimemo_userId')
     setUserId(null)
     setUser(null)
@@ -122,13 +139,28 @@ function App() {
     }
   }
 
+  const subscribeToPush = async (token: string) => {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return
+    try {
+      const registration = await navigator.serviceWorker.ready
+      const vapidKey = await api.getVapidPublicKey()
+      const sub = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: vapidKey
+      })
+      await api.subscribePush(token, sub)
+      console.log('[PUSH] Subscribed successfully')
+    } catch (e) {
+      console.error('[PUSH] Subscribe failed:', e)
+    }
+  }
+
   const testNotification = () => {
     if (notificationStatus === 'granted') {
       new Notification('MediMémo - Test', {
-        body: 'Il est l'heure de prendre votre Doliprane (1 comprimé).',
+        body: "Il est l'heure de prendre votre Doliprane (1 comprimé).",
         icon: '/icon-192x192.png',
         badge: '/icon-192x192.png',
-        vibrate: [200, 100, 200]
       })
     } else {
       requestNotificationPermission()
@@ -137,12 +169,16 @@ function App() {
 
   // === Landing Screen ===
   if (screen === 'landing') {
-    return <LandingScreen onSignup={() => setScreen('signup')} />
+    return <LandingScreen onSignup={() => setScreen('signup')} onLogin={() => setScreen('login')} />
   }
 
   // === Signup Screen ===
   if (screen === 'signup') {
     return <SignupScreen onSubmit={handleSignup} onBack={() => setScreen('landing')} loading={loading} />
+  }
+
+  if (screen === 'login') {
+    return <LoginScreen onSubmit={handleLogin} onBack={() => setScreen('landing')} loading={loading} />
   }
 
   if (loading || !userId) {
@@ -184,12 +220,12 @@ function App() {
           onCaregiver={() => setScreen('caregiver')}
           onPremium={() => setScreen('premium')}
           onReport={() => setScreen('report')}
-          onToggleTaken={async (id) => {
+          onToggleTaken={async (id: string) => {
             await api.toggleMedicationTaken(id)
             const meds = await api.getMedications(userId)
             setMedications(meds)
           }}
-          onRemoveMed={async (id) => {
+          onRemoveMed={async (id: string) => {
             await api.deleteMedication(id)
             const meds = await api.getMedications(userId)
             setMedications(meds)
@@ -259,7 +295,7 @@ function App() {
 }
 
 // === Landing Page ===
-function LandingScreen({ onSignup }: { onSignup: () => void }) {
+function LandingScreen({ onSignup, onLogin }: { onSignup: () => void; onLogin: () => void }) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50">
       <header className="px-5 py-4 flex items-center justify-between max-w-md mx-auto">
@@ -311,9 +347,12 @@ function LandingScreen({ onSignup }: { onSignup: () => void }) {
         <button onClick={onSignup} className="btn-primary w-full text-lg mb-3">
           Commencer gratuitement
         </button>
-        <p className="text-center text-slate-500 text-sm">
+        <p className="text-center text-slate-500 text-sm mb-3">
           Sans engagement · 7 jours gratuits Premium
         </p>
+        <button onClick={onLogin} className="text-center text-primary-600 font-semibold text-sm w-full">
+          J'ai déjà un compte
+        </button>
 
         <div className="mt-12 pt-8 border-t border-slate-200">
           <h3 className="font-bold text-slate-900 mb-3">Pourquoi MediMémo ?</h3>
@@ -348,9 +387,10 @@ function FeatureStep({ n, title, desc }: { n: number; title: string; desc: strin
 }
 
 // === Signup Screen ===
-function SignupScreen({ onSubmit, onBack, loading }: { onSubmit: (email: string, name: string) => void; onBack: () => void; loading: boolean }) {
+function SignupScreen({ onSubmit, onBack, loading }: { onSubmit: (email: string, password: string, name: string) => void; onBack: () => void; loading: boolean }) {
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
+  const [password, setPassword] = useState('')
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -367,30 +407,54 @@ function SignupScreen({ onSubmit, onBack, loading }: { onSubmit: (email: string,
         <div className="space-y-5">
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-2">Prénom</label>
-            <input
-              type="text"
-              className="input"
-              placeholder="Marie"
-              value={name}
-              onChange={e => setName(e.target.value)}
-            />
+            <input type="text" className="input" placeholder="Marie" value={name} onChange={e => setName(e.target.value)} />
           </div>
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-2">Email</label>
-            <input
-              type="email"
-              className="input"
-              placeholder="marie@email.fr"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-            />
+            <input type="email" className="input" placeholder="marie@email.fr" value={email} onChange={e => setEmail(e.target.value)} />
           </div>
-          <button
-            onClick={() => email && onSubmit(email, name || email.split('@')[0])}
-            disabled={!email || loading}
-            className="btn-primary w-full text-lg disabled:opacity-50"
-          >
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">Mot de passe</label>
+            <input type="password" className="input" placeholder="6 caractères minimum" value={password} onChange={e => setPassword(e.target.value)} />
+          </div>
+          <button onClick={() => email && password && onSubmit(email, password, name || email.split('@')[0])} disabled={!email || !password || password.length < 6 || loading} className="btn-primary w-full text-lg disabled:opacity-50">
             {loading ? 'Création…' : 'Créer mon compte'}
+          </button>
+          <p className="text-xs text-slate-400 text-center">Vos données sont protégées (RGPD).</p>
+        </div>
+      </main>
+    </div>
+  )
+}
+
+// === Login Screen ===
+function LoginScreen({ onSubmit, onBack, loading }: { onSubmit: (email: string, password: string) => void; onBack: () => void; loading: boolean }) {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <header className="px-5 py-4 flex items-center gap-2 max-w-md mx-auto">
+        <button onClick={onBack} className="p-2 -ml-2 text-slate-500 hover:text-slate-900">
+          <ChevronLeft className="w-6 h-6" />
+        </button>
+        <h1 className="text-xl font-bold text-slate-900">Connexion</h1>
+      </header>
+
+      <main className="px-5 py-8 max-w-md mx-auto">
+        <p className="text-slate-600 mb-6">Heureux de vous revoir sur MediMémo.</p>
+
+        <div className="space-y-5">
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">Email</label>
+            <input type="email" className="input" placeholder="marie@email.fr" value={email} onChange={e => setEmail(e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">Mot de passe</label>
+            <input type="password" className="input" placeholder="••••••" value={password} onChange={e => setPassword(e.target.value)} />
+          </div>
+          <button onClick={() => email && password && onSubmit(email, password)} disabled={!email || !password || loading} className="btn-primary w-full text-lg disabled:opacity-50">
+            {loading ? 'Connexion…' : 'Se connecter'}
           </button>
         </div>
       </main>

@@ -117,3 +117,56 @@ export async function checkNotifications() {
   if (!res.ok) throw new Error('Failed to check notifications')
   return res.json()
 }
+
+// === Auth ===
+export async function authSignup(email: string, password: string, name?: string) {
+  const res = await fetch(`${API_URL}/api/auth/signup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, name })
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || 'Erreur inscription')
+  return data
+}
+
+export async function authLogin(email: string, password: string) {
+  const res = await fetch(`${API_URL}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password })
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || 'Erreur connexion')
+  return data
+}
+
+// === Push notifications ===
+export async function getVapidPublicKey() {
+  const res = await fetch(`${API_URL}/api/push/vapid-public-key`)
+  if (!res.ok) throw new Error('Failed to fetch VAPID key')
+  const data = await res.json()
+  return data.publicKey as string
+}
+
+export async function subscribePush(token: string, subscription: PushSubscription) {
+  const res = await fetch(`${API_URL}/api/push/subscribe`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify({
+      endpoint: subscription.endpoint,
+      keys: subscription.toJSON().keys
+    })
+  })
+  if (!res.ok) throw new Error('Failed to subscribe to push')
+  return res.json()
+}
+
+export async function testPush(token: string) {
+  const res = await fetch(`${API_URL}/api/push/test`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}` }
+  })
+  if (!res.ok) throw new Error('Failed to send test push')
+  return res.json()
+}

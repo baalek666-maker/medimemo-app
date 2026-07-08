@@ -11,6 +11,7 @@ model User {
   id              String   @id @default(cuid())
   email           String   @unique
   name            String?
+  passwordHash    String?
   isPremium       Boolean  @default(false)
   premiumUntil    DateTime?
   stripeCustomerId String?
@@ -22,6 +23,20 @@ model User {
   medications Medication[]
   caregivers  Caregiver[]
   notificationLogs NotificationLog[]
+  pushSubscriptions PushSubscription[]
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String
+  keys      String   // JSON string: { p256dh, auth }
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, endpoint])
+  @@index([userId])
 }
 
 model Medication {

@@ -2,11 +2,56 @@
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta name="theme-color" content="#2563eb" />
-    <meta name="description" content="MediMémo — Rappels de médicaments pour seniors et aidants" />
-    <title>MediMémo</title>
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
+    <meta name="theme-color" content="#0ea5e9" />
+
+    <!-- SEO primary -->
+    <title>MediMémo — Rappels de médicaments pour seniors et aidants</title>
+    <meta name="description" content="MediMémo vous rappelle tous vos médicaments à l'heure. Application française conçue pour les seniors et leurs aidants. Essai gratuit 7 jours Premium." />
+    <meta name="keywords" content="rappel médicament, pilulier connecté, aidants familiaux, seniors, application santé, observance, médicaments France" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://medimemo.fr/" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://medimemo.fr/" />
+    <meta property="og:title" content="MediMémo — Ne ratez plus aucun médicament" />
+    <meta property="og:description" content="L'app française qui rappelle vos médicaments à l'heure. Vos aidants reçoivent un SMS si vous oubliez une prise." />
+    <meta property="og:image" content="https://medimemo.fr/og-image.png" />
+    <meta property="og:locale" content="fr_FR" />
+    <meta property="og:site_name" content="MediMémo" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="MediMémo — Rappels médicaments pour seniors" />
+    <meta name="twitter:description" content="Application française de rappels de médicaments. Essai gratuit 7 jours." />
+    <meta name="twitter:image" content="https://medimemo.fr/og-image.png" />
+
+    <!-- JSON-LD structured data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "MobileApplication",
+      "name": "MediMémo",
+      "operatingSystem": "Web, PWA",
+      "applicationCategory": "HealthApplication",
+      "offers": {
+        "@type": "Offer",
+        "price": "59.99",
+        "priceCurrency": "EUR"
+      },
+      "description": "Rappels de médicaments pour seniors et aidants en France",
+      "inLanguage": "fr",
+      "audience": {
+        "@type": "PeopleAudience",
+        "suggestedMinAge": 50
+      }
+    }
+    </script>
+
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
   </head>
   <body>
     <div id="root"></div>

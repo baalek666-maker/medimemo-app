@@ -13,7 +13,9 @@
     "lucide-react": "^0.294.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-router-dom": "^6.21.0"
+    "react-router-dom": "^6.21.0",
+    "workbox-precaching": "^7.4.1",
+    "workbox-window": "^7.4.1"
   },
   "devDependencies": {
     "@types/react": "^18.2.43",

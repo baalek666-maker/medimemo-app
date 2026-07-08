@@ -1,4 +1,6 @@
 import { PrismaClient } from '@prisma/client'
+import { sendPushToUser } from './push'
+import { sendMissedDoseAlertToCaregivers } from './sms'
 
 const prisma = new PrismaClient()
 
@@ -47,15 +49,25 @@ export async function checkMissedDoses() {
         }
       })
 
-      // Notifie les aidants
+      // 1. Push notification à l'utilisateur (rappel direct)
+      const pushSent = await sendPushToUser(user.id, {
+        title: `Rappel MediMémo : ${med.name}`,
+        body: `Vous n'avez pas pris votre ${med.name} (${med.dose}) prévu à ${med.time}.`,
+        url: '/',
+        tag: `med-${med.id}-${today}`,
+      })
+
+      // 2. SMS aux aidants (si activé)
+      const smsSent = await sendMissedDoseAlertToCaregivers(
+        user.id,
+        med.name,
+        med.time
+      )
+
+      // 3. Email (à brancher SMTP / SendGrid)
       for (const cg of user.caregivers) {
         if (cg.notifyEmail && cg.email) {
-          // TODO: brancher SMTP / SendGrid
           console.log(`[ALERT EMAIL] To ${cg.email}: ${user.name || 'Votre proche'} a oublié ${med.name} (${med.dose})`)
-        }
-        if (cg.notifySms && cg.phone) {
-          // TODO: brancher Twilio
-          console.log(`[ALERT SMS] To ${cg.phone}: Oubli ${med.name}`)
         }
       }
 
@@ -65,6 +77,8 @@ export async function checkMissedDoses() {
         medName: med.name,
         medDose: med.dose,
         medTime: med.time,
+        pushSent,
+        smsSent,
         caregivers: user.caregivers.length
       })
     }

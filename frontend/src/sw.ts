@@ -1,8 +1,11 @@
+// @ts-nocheck
 // MediMémo Service Worker
 const CACHE_NAME = 'medimemo-v1'
 const RUNTIME_CACHE = 'medimemo-runtime-v1'
 
-const PRECACHE_URLS = [
+// vite-plugin-pwa injects the precache manifest here
+const WB_MANIFEST = self.__WB_MANIFEST || []
+const PRECACHE_URLS = WB_MANIFEST.length > 0 ? WB_MANIFEST : [
   '/',
   '/index.html',
   '/icon-192x192.png',
@@ -52,9 +55,9 @@ self.addEventListener('fetch', (event) => {
   )
 })
 
-// Push notification handler (for future web-push integration)
+// Push notification handler
 self.addEventListener('push', (event) => {
-  let data = { title: 'MediMémo', body: 'Il est l'heure de prendre vos médicaments.' }
+  let data = { title: 'MediMémo', body: "Il est l'heure de prendre vos médicaments.", url: '/', tag: 'medimemo-reminder' }
   try {
     if (event.data) data = event.data.json()
   } catch (e) {}
@@ -64,10 +67,10 @@ self.addEventListener('push', (event) => {
       body: data.body,
       icon: '/icon-192x192.png',
       badge: '/icon-192x192.png',
-      tag: 'medimemo-reminder',
+      tag: data.tag || 'medimemo-reminder',
       requireInteraction: true,
       vibrate: [200, 100, 200],
-      data: { url: '/' }
+      data: { url: data.url || '/' }
     })
   )
 })
@@ -75,10 +78,13 @@ self.addEventListener('push', (event) => {
 // Notification click: open the app
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
+  const targetUrl = event.notification.data?.url || '/'
   event.waitUntil(
     clients.matchAll({ type: 'window' }).then((clientList) => {
-      if (clientList.length > 0) return clientList[0].focus()
-      return clients.openWindow('/')
+      for (const client of clientList) {
+        if ('focus' in client) return client.focus()
+      }
+      return clients.openWindow(targetUrl)
     })
   )
 })
