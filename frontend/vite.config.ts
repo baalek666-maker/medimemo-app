@@ -6,25 +6,26 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      strategies: 'injectManifest',
+      srcDir: 'public',
+      filename: 'sw.js',
       registerType: 'autoUpdate',
+      injectRegister: false,
       manifest: {
-        name: 'MediMémo',
+        name: 'MediMémo - Rappels médicaments',
         short_name: 'MediMémo',
-        description: 'Rappels de médicaments pour seniors et aidants',
+        description: 'Application de rappels de médicaments pour seniors et aidants en France',
         theme_color: '#2563eb',
         background_color: '#ffffff',
         display: 'standalone',
+        orientation: 'portrait',
+        lang: 'fr-FR',
+        start_url: '/',
+        scope: '/',
         icons: [
-          {
-            src: '/icon-192x192.png',
-            sizes: '192x192',
-            type: 'image/png'
-          },
-          {
-            src: '/icon-512x512.png',
-            sizes: '512x512',
-            type: 'image/png'
-          }
+          { src: '/icon-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
+          { src: '/icon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+          { src: '/icon-180x180.png', sizes: '180x180', type: 'image/png' }
         ]
       }
     })

@@ -75,3 +75,45 @@ export async function deleteCaregiver(id: string) {
   })
   if (!res.ok) throw new Error('Failed to delete caregiver')
 }
+
+
+// === Stripe / Billing ===
+export async function createCheckoutSession(userId: string, email: string) {
+  const res = await fetch(`${API_URL}/api/billing/checkout`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId, email })
+  })
+  if (!res.ok) throw new Error('Failed to create checkout session')
+  return res.json()
+}
+
+export async function getSubscriptionStatus(userId: string) {
+  const res = await fetch(`${API_URL}/api/billing/status/${userId}`)
+  if (!res.ok) throw new Error('Failed to fetch subscription status')
+  return res.json()
+}
+
+export async function cancelSubscription(userId: string) {
+  const res = await fetch(`${API_URL}/api/billing/cancel/${userId}`, {
+    method: 'POST'
+  })
+  if (!res.ok) throw new Error('Failed to cancel subscription')
+  return res.json()
+}
+
+// === Reports ===
+export async function getMonthlyReport(userId: string) {
+  const res = await fetch(`${API_URL}/api/reports/monthly/${userId}`)
+  if (!res.ok) throw new Error('Failed to fetch monthly report')
+  return res.json()
+}
+
+// === Notifications ===
+export async function checkNotifications() {
+  const res = await fetch(`${API_URL}/api/notifications/check`, {
+    method: 'POST'
+  })
+  if (!res.ok) throw new Error('Failed to check notifications')
+  return res.json()
+}

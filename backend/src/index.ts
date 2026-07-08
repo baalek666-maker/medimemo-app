@@ -2,10 +2,29 @@ import express from 'express'
 import cors from 'cors'
 import { PrismaClient } from '@prisma/client'
 import { z } from 'zod'
+import {
+  createCheckoutSession,
+  handleStripeWebhook,
+  getSubscriptionStatus,
+  cancelSubscription,
+} from './stripe'
+import { checkMissedDoses, getMonthlyReport } from './notifications'
 
 const app = express()
 const prisma = new PrismaClient()
 const PORT = process.env.PORT || 3001
+
+// Stripe webhook needs RAW body BEFORE json middleware
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  try {
+    const event = JSON.parse(req.body.toString())
+    await handleStripeWebhook(event as any)
+    res.json({ received: true })
+  } catch (error) {
+    console.error('Webhook error:', error)
+    res.status(400).json({ error: 'Webhook error' })
+  }
+})
 
 app.use(cors())
 app.use(express.json())
@@ -220,4 +239,85 @@ app.delete('/api/caregivers/:id', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`🚀 MediMémo backend running on port ${PORT}`)
+
+  // Lancement du scheduler de notifications : toutes les 5 min
+  setInterval(async () => {
+    try {
+      const result = await checkMissedDoses()
+      if (result.alertsSent > 0) {
+        console.log(`[CRON] ${result.alertsSent} alerte(s) envoyée(s)`)
+      }
+    } catch (e) {
+      console.error('[CRON] Erreur:', e)
+    }
+  }, 5 * 60 * 1000)
+})
+
+// === Stripe / Premium routes ===
+app.post('/api/billing/checkout', async (req, res) => {
+  try {
+    const { userId, email } = req.body
+    if (!userId || !email) return res.status(400).json({ error: 'userId and email required' })
+    const session = await createCheckoutSession(userId, email)
+    res.json(session)
+  } catch (e: any) {
+    console.error('Checkout error:', e)
+    res.status(500).json({ error: 'Checkout failed' })
+  }
+})
+
+app.get('/api/billing/status/:userId', async (req, res) => {
+  try {
+    const status = await getSubscriptionStatus(req.params.userId)
+    if (!status) return res.status(404).json({ error: 'User not found' })
+    res.json(status)
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to fetch status' })
+  }
+})
+
+app.post('/api/billing/cancel', async (req, res) => {
+  try {
+    const { userId } = req.body
+    const ok = await cancelSubscription(userId)
+    res.json({ success: ok })
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to cancel' })
+  }
+})
+
+// === Notifications routes ===
+app.post('/api/notifications/check', async (_req, res) => {
+  try {
+    const result = await checkMissedDoses()
+    res.json(result)
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to check' })
+  }
+})
+
+// === Reports ===
+app.get('/api/reports/monthly/:userId', async (req, res) => {
+  try {
+    const year = parseInt((req.query.year as string) || new Date().getFullYear().toString())
+    const month = parseInt((req.query.month as string) || (new Date().getMonth() + 1).toString())
+    const report = await getMonthlyReport(req.params.userId, year, month)
+    res.json(report)
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to generate report' })
+  }
+})
+
+// === Onboarding notifications toggle ===
+app.patch('/api/users/:userId/notifications', async (req, res) => {
+  try {
+    const { enabled } = req.body
+    const user = await prisma.user.update({
+      where: { id: req.params.userId },
+      data: { notificationsEnabled: !!enabled }
+    })
+    res.json(user)
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to update' })
+  }
 })
