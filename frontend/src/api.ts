@@ -170,3 +170,16 @@ export async function testPush(token: string) {
   if (!res.ok) throw new Error('Failed to send test push')
   return res.json()
 }
+
+// === B2B EHPAD ===
+export async function getEhpadDashboard() {
+  const res = await fetch(`${API_URL}/api/ehpad/dashboard`)
+  if (!res.ok) throw new Error('Failed to load EHPAD dashboard')
+  return res.json()
+}
+
+export async function getResidentDetail(id: string) {
+  const res = await fetch(`${API_URL}/api/ehpad/residents/${id}`)
+  if (!res.ok) throw new Error('Failed to load resident')
+  return res.json()
+}

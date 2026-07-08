@@ -11,6 +11,9 @@ import {
 import { checkMissedDoses, getMonthlyReport } from './notifications'
 import { signup, login, authMiddleware } from './auth'
 import { saveSubscription, removeSubscription, sendPushToUser, vapidPublicKey } from './push'
+import { sendWelcomeEmail, sendPremiumConfirmationEmail } from './email'
+import { getEhpadDashboard, getResidentDetail } from './ehpad'
+import { trackServer } from './analytics'
 
 const app = express()
 const prisma = new PrismaClient()
@@ -117,6 +120,8 @@ app.post('/api/auth/signup', async (req, res) => {
     if (!email || !password) return res.status(400).json({ error: 'Email et mot de passe requis' })
     if (password.length < 6) return res.status(400).json({ error: 'Mot de passe trop court (6+ caractères)' })
     const result = await signup(email, password, name)
+    // Fire-and-forget welcome email
+    sendWelcomeEmail(result.user.email, result.user.name || 'à MediMémo').catch(console.error)
     res.status(201).json(result)
   } catch (e: any) {
     if (e.message === 'EMAIL_EXISTS') return res.status(409).json({ error: 'Email déjà utilisé' })
@@ -308,6 +313,26 @@ app.delete('/api/caregivers/:id', async (req, res) => {
     res.status(204).send()
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete caregiver' })
+  }
+})
+
+// === B2B EHPAD ===
+app.get('/api/ehpad/dashboard', async (_req, res) => {
+  try {
+    const data = await getEhpadDashboard('demo-org')
+    trackServer('ehpad_dashboard_viewed', { orgId: 'demo-org' })
+    res.json(data)
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to load dashboard' })
+  }
+})
+
+app.get('/api/ehpad/residents/:id', async (req, res) => {
+  try {
+    const data = await getResidentDetail(req.params.id)
+    res.json(data)
+  } catch (error) {
+    res.status(404).json({ error: 'Resident not found' })
   }
 })
 

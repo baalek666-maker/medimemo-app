@@ -54,13 +54,15 @@ export async function createCheckoutSession(userId: string, userEmail: string) {
   return { url: session.url!, sessionId: session.id }
 }
 
+import { sendPremiumConfirmationEmail } from './email'
+
 export async function handleStripeWebhook(event: Stripe.Event) {
   switch (event.type) {
     case 'checkout.session.completed': {
       const session = event.data.object as Stripe.Checkout.Session
       const userId = session.metadata?.userId
       if (userId) {
-        await prisma.user.update({
+        const updated = await prisma.user.update({
           where: { id: userId },
           data: {
             isPremium: true,
@@ -69,6 +71,10 @@ export async function handleStripeWebhook(event: Stripe.Event) {
             stripeSubId: session.subscription as string
           }
         })
+        // Send premium confirmation email
+        if (updated.email) {
+          sendPremiumConfirmationEmail(updated.email, updated.name || '').catch(console.error)
+        }
       }
       break
     }

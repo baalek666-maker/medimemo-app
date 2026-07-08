@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Home, Plus, User, ChevronRight, Shield, Heart, Search, Trash2, Users, Check, ChevronLeft, Bell, FileText, LogOut, Lock, Download } from 'lucide-react'
 import * as api from './api'
+import { track, identifyUser, resetAnalytics } from './analytics'
+import { EhpadLanding, EhpadDashboard } from './Ehpad'
 import jsPDF from 'jspdf'
 
 interface Medication {
@@ -34,7 +36,7 @@ interface UserData {
   premiumUntil?: string
 }
 
-type Screen = 'home' | 'add' | 'premium' | 'caregiver' | 'report' | 'landing' | 'signup' | 'login'
+type Screen = 'home' | 'add' | 'premium' | 'caregiver' | 'report' | 'landing' | 'signup' | 'login' | 'ehpad' | 'ehpad-demo'
 
 function App() {
   const [screen, setScreen] = useState<Screen>('landing')
@@ -88,6 +90,8 @@ function App() {
     localStorage.setItem('medimemo_userId', authData.user.id)
     setUserId(authData.user.id)
     setUser({ id: authData.user.id, email: authData.user.email, name: authData.user.name, isPremium: authData.user.isPremium })
+    identifyUser(authData.user.id, { email: authData.user.email, name: authData.user.name })
+    track('user_logged_in', { method: 'email' })
     setScreen('home')
     requestNotificationPermission()
     subscribeToPush(authData.token)
@@ -120,6 +124,7 @@ function App() {
   const handleLogout = () => {
     localStorage.removeItem('medimemo_token')
     localStorage.removeItem('medimemo_userId')
+    resetAnalytics()
     setUserId(null)
     setUser(null)
     setMedications([])
@@ -169,7 +174,15 @@ function App() {
 
   // === Landing Screen ===
   if (screen === 'landing') {
-    return <LandingScreen onSignup={() => setScreen('signup')} onLogin={() => setScreen('login')} />
+    return <LandingScreen onSignup={() => setScreen('signup')} onLogin={() => setScreen('login')} onEhpad={() => setScreen('ehpad')} />
+  }
+
+  // === B2B EHPAD ===
+  if (screen === 'ehpad') {
+    return <EhpadLanding onBack={() => setScreen('landing')} onDemo={() => setScreen('ehpad-demo')} />
+  }
+  if (screen === 'ehpad-demo') {
+    return <EhpadDashboard onBack={() => setScreen('ehpad')} />
   }
 
   // === Signup Screen ===
@@ -203,7 +216,7 @@ function App() {
             {user?.isPremium && (
               <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-1 rounded-full">PREMIUM</span>
             )}
-            <button onClick={() => setScreen('premium')} className="text-sm font-semibold text-primary-600 bg-primary-50 px-3 py-1.5 rounded-full">
+            <button onClick={() => { track('premium_viewed'); setScreen('premium') }} className="text-sm font-semibold text-primary-600 bg-primary-50 px-3 py-1.5 rounded-full">
               {user?.isPremium ? 'Mon compte' : 'Premium'}
             </button>
           </div>
@@ -218,7 +231,7 @@ function App() {
           notificationStatus={notificationStatus}
           onAdd={() => setScreen('add')}
           onCaregiver={() => setScreen('caregiver')}
-          onPremium={() => setScreen('premium')}
+          onPremium={() => { track('premium_viewed'); setScreen('premium') }}
           onReport={() => setScreen('report')}
           onToggleTaken={async (id: string) => {
             await api.toggleMedicationTaken(id)
@@ -284,7 +297,7 @@ function App() {
           <button onClick={() => setScreen('add')} className="flex flex-col items-center justify-center -mt-8 w-14 h-14 rounded-full bg-primary-600 text-white shadow-lg shadow-primary-600/30">
             <Plus className="w-7 h-7" />
           </button>
-          <button onClick={() => setScreen('premium')} className={`flex flex-col items-center gap-1 ${screen === 'premium' ? 'text-primary-600' : 'text-slate-400'}`}>
+          <button onClick={() => { track('premium_viewed'); setScreen('premium') }} className={`flex flex-col items-center gap-1 ${screen === 'premium' ? 'text-primary-600' : 'text-slate-400'}`}>
             <User className="w-6 h-6" />
             <span className="text-xs font-medium">Compte</span>
           </button>
@@ -295,7 +308,7 @@ function App() {
 }
 
 // === Landing Page ===
-function LandingScreen({ onSignup, onLogin }: { onSignup: () => void; onLogin: () => void }) {
+function LandingScreen({ onSignup, onLogin, onEhpad }: { onSignup: () => void; onLogin: () => void; onEhpad: () => void }) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50">
       <header className="px-5 py-4 flex items-center justify-between max-w-md mx-auto">
@@ -366,6 +379,7 @@ function LandingScreen({ onSignup, onLogin }: { onSignup: () => void; onLogin: (
       </main>
 
       <footer className="px-5 py-6 text-center text-slate-400 text-xs max-w-md mx-auto">
+        <button onClick={onEhpad} className="block mx-auto mb-2 text-slate-600 font-semibold underline">🏥 MediMémo pour EHPAD & Établissements</button>
         © 2024 MediMémo · Fait en France · <a href="#" className="underline">CGU</a> · <a href="#" className="underline">Confidentialité</a>
       </footer>
     </div>
