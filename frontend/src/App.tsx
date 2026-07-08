@@ -1,10 +1,15 @@
 import { useState, useEffect } from 'react'
-import { Home, Plus, User, ChevronRight, Shield, Heart, Search, Trash2, Users, Check, ChevronLeft, Bell, FileText, LogOut, Lock, Download } from 'lucide-react'
+import { Home, Plus, User, ChevronRight, Shield, Heart, Search, Trash2, Users, Check, ChevronLeft, Bell, FileText, Lock, Download } from 'lucide-react'
 import * as api from './api'
 import { track, identifyUser, resetAnalytics } from './analytics'
 import { EhpadLanding, EhpadDashboard } from './Ehpad'
 import Referral from './Referral'
 import { LandingPageView, SEO_PAGES } from './LandingPages'
+import Onboarding from './Onboarding'
+import Paywall from './Paywall'
+import Settings from './Settings'
+import AdminDashboard from './AdminDashboard'
+import { AdminLogin } from './AdminLogin'
 import { getLandingCta } from './experiments'
 import jsPDF from 'jspdf'
 
@@ -39,9 +44,18 @@ interface UserData {
   premiumUntil?: string
 }
 
-type Screen = 'home' | 'add' | 'premium' | 'caregiver' | 'report' | 'landing' | 'signup' | 'login' | 'ehpad' | 'ehpad-demo' | 'referral'
+type Screen = 'home' | 'add' | 'premium' | 'caregiver' | 'report' | 'landing' | 'signup' | 'login' | 'ehpad' | 'ehpad-demo' | 'referral' | 'onboarding' | 'settings' | 'admin'
 
 function App() {
+  // Admin dashboard: détecté par l'URL /admin
+  if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')) {
+    const storedToken = localStorage.getItem('medimemo_admin_token') || ''
+    if (!storedToken) {
+      return <AdminLogin onAuth={(t) => { localStorage.setItem('medimemo_admin_token', t); window.location.reload() }} />
+    }
+    return <AdminDashboard adminToken={storedToken} onLogout={() => { localStorage.removeItem('medimemo_admin_token'); window.location.href = '/' }} />
+  }
+
   const [screen, setScreen] = useState<Screen>('landing')
   const [user, setUser] = useState<UserData | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
@@ -102,9 +116,21 @@ function App() {
     setUser({ id: authData.user.id, email: authData.user.email, name: authData.user.name, isPremium: authData.user.isPremium })
     identifyUser(authData.user.id, { email: authData.user.email, name: authData.user.name })
     track('user_logged_in', { method: 'email' })
-    setScreen('home')
+    const onboarded = localStorage.getItem('medimemo_onboarded')
+    setScreen(onboarded ? 'home' : 'onboarding')
     requestNotificationPermission()
     subscribeToPush(authData.token)
+  }
+
+  const handleOnboardingComplete = async (profile: { isSenior: boolean; isCaregiver: boolean; firstMed?: any }) => {
+    localStorage.setItem('medimemo_onboarded', 'true')
+    if (profile.firstMed) {
+      setMedications(prev => [...prev, profile.firstMed])
+    }
+    track('onboarding_completed', profile)
+    // Reload user data to get the latest state
+    if (userId) await loadUser(userId)
+    setScreen('home')
   }
 
   const handleLogin = async (email: string, password: string) => {
@@ -197,6 +223,23 @@ function App() {
 
   if (seoSlug) {
     return <LandingPageView slug={seoSlug} onSignup={() => { setSeoSlug(null); setScreen('signup') }} />
+  }
+
+  if (screen === 'onboarding') {
+    return <Onboarding onComplete={handleOnboardingComplete} />
+  }
+
+  if (screen === 'settings') {
+    return (
+      <Settings
+        user={user!}
+        onBack={() => setScreen('home')}
+        onLogout={handleLogout}
+        onAccountDeleted={() => {
+          setScreen('landing')
+        }}
+      />
+    )
   }
 
   if (screen === 'referral') {
@@ -295,7 +338,7 @@ function App() {
       )}
 
       {screen === 'premium' && (
-        <PremiumScreen
+        <Paywall
           user={user!}
           onBack={() => setScreen('home')}
           onSubscribed={async () => {
@@ -321,6 +364,10 @@ function App() {
           <button onClick={() => { track('premium_viewed'); setScreen('premium') }} className={`flex flex-col items-center gap-1 ${screen === 'premium' ? 'text-primary-600' : 'text-slate-400'}`}>
             <User className="w-6 h-6" />
             <span className="text-xs font-medium">Compte</span>
+          </button>
+          <button onClick={() => setScreen('settings')} className="flex flex-col items-center gap-1 text-slate-400">
+            <Bell className="w-6 h-6" />
+            <span className="text-xs font-medium">Reglages</span>
           </button>
         </div>
       </nav>
@@ -784,107 +831,6 @@ function CaregiverScreen({ userId, caregivers, isPremium, onBack, onRefresh }: a
             ))}
           </div>
         </div>
-      )}
-    </main>
-  )
-}
-
-// === Premium Screen with Stripe ===
-function PremiumScreen({ user, onBack, onSubscribed, onLogout }: any) {
-  const [processing, setProcessing] = useState(false)
-  const [error, setError] = useState('')
-
-  const handleSubscribe = async () => {
-    setProcessing(true)
-    setError('')
-    try {
-      const result = await api.createCheckoutSession(user.id, user.email) as any
-      if (result.url) {
-        window.location.href = result.url
-      }
-    } catch (e: any) {
-      setError('Erreur lors de la souscription. Réessayez.')
-      console.error(e)
-    } finally {
-      setProcessing(false)
-    }
-  }
-
-  const handleCancel = async () => {
-    if (!confirm('Annuler votre abonnement Premium ?')) return
-    await api.cancelSubscription(user.id)
-    onSubscribed()
-    alert('Abonnement annulé')
-  }
-
-  return (
-    <main className="p-5 pb-28">
-      <div className="flex items-center gap-2 mb-2">
-        <button onClick={onBack} className="p-2 -ml-2 text-slate-500 hover:text-slate-900">
-          <ChevronLeft className="w-6 h-6" />
-        </button>
-        <h2 className="text-2xl font-bold text-slate-900">Mon compte</h2>
-      </div>
-
-      {user.isPremium ? (
-        <>
-          <div className="card bg-gradient-to-br from-amber-400 to-amber-500 text-white border-0 mb-6">
-            <div className="text-sm font-medium mb-1">Vous êtes Premium ✨</div>
-            <div className="text-3xl font-bold mb-2">Merci !</div>
-            <p className="text-amber-100 text-sm">
-              Valable jusqu'au {user.premiumUntil ? new Date(user.premiumUntil).toLocaleDateString('fr-FR') : '...'}
-            </p>
-          </div>
-
-          <button onClick={handleCancel} className="btn-secondary w-full text-slate-600">
-            Annuler mon abonnement
-          </button>
-        </>
-      ) : (
-        <>
-          <p className="text-slate-500 mb-6 ml-10">Pour vous et vos proches.</p>
-
-          <div className="card bg-gradient-to-br from-primary-600 to-primary-700 text-white border-0 mb-6">
-            <div className="text-sm text-primary-100 font-medium mb-1">Abonnement annuel</div>
-            <div className="text-4xl font-bold">59,99 €<span className="text-lg font-normal text-primary-100">/an</span></div>
-            <div className="text-sm text-primary-100 mt-1">soit 4,99 €/mois · Sans engagement</div>
-          </div>
-
-          <ul className="space-y-4 mb-8">
-            {[
-              'Médicaments illimités',
-              'Suivi par plusieurs aidants',
-              'Alertes SMS si oubli',
-              'Alertes email aux aidants',
-              'Rapports PDF mensuels',
-              'Base de médicaments française (80+)',
-              'Support prioritaire'
-            ].map((feature, i) => (
-              <li key={i} className="flex items-center gap-3 text-slate-700">
-                <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center">
-                  <Check className="w-4 h-4 text-green-600" />
-                </div>
-                {feature}
-              </li>
-            ))}
-          </ul>
-
-          {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
-
-          <button onClick={handleSubscribe} disabled={processing} className="btn-primary w-full text-lg mb-3 disabled:opacity-50">
-            {processing ? 'Redirection…' : 'Passer à Premium'}
-          </button>
-
-          <p className="text-xs text-slate-400 text-center mb-4">
-            Paiement sécurisé par Stripe · Annulation à tout moment
-          </p>
-
-          <div className="border-t border-slate-200 pt-4">
-            <button onClick={onLogout} className="text-slate-500 text-sm flex items-center gap-2 mx-auto">
-              <LogOut className="w-4 h-4" /> Se déconnecter
-            </button>
-          </div>
-        </>
       )}
     </main>
   )

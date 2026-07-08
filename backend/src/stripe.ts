@@ -75,6 +75,10 @@ export async function handleStripeWebhook(event: Stripe.Event): Promise<{ userId
         if (updated.email) {
           sendPremiumConfirmationEmail(updated.email, updated.name || '').catch(console.error)
         }
+        // Cancel pending upsell emails (user already converted)
+        import('./email-sequences').then(m => {
+          m.cancelPendingEmails(userId, ['upsell_d14', 'upsell_d30', 'winback_d60']).catch(console.error)
+        }).catch(console.error)
         return { userId }
       }
       break

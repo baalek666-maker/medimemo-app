@@ -344,4 +344,209 @@ app.get('/api/ehpad/residents/:id', async (req, res) => {
   }
 })
 
+// === GDPR Routes ===
+
+// Export all user data (RGPD - droit d'accès)
+app.get('/api/users/:userId/gdpr/export', authMiddleware, async (req: any, res) => {
+  try {
+    if (req.userId !== req.params.userId) {
+      return res.status(403).json({ error: 'Non autorise' })
+    }
+    const userId = req.params.userId
+    const [user, medications, caregivers, userBadges, affiliates, referralAsReferrer] = await Promise.all([
+      prisma.user.findUnique({ where: { id: userId }, select: { id: true, email: true, name: true, isPremium: true, premiumUntil: true, createdAt: true } }),
+      prisma.medication.findMany({ where: { userId } }),
+      prisma.caregiver.findMany({ where: { userId } }),
+      prisma.userBadge.findMany({ where: { userId }, include: { badge: true } }),
+      prisma.affiliate.findMany({ where: { userId } }),
+      prisma.referral.findMany({ where: { referrerId: userId } })
+    ])
+
+    const exportData = {
+      exportedAt: new Date().toISOString(),
+      user,
+      medications,
+      caregivers,
+      badges: userBadges,
+      affiliates,
+      referralsGiven: referralAsReferrer,
+      notice: 'Conforme au RGPD - Article 15 (droit d acces). Vos donnees sont exportees integralement.'
+    }
+
+    res.setHeader('Content-Type', 'application/json')
+    res.setHeader('Content-Disposition', `attachment; filename="medimemo-donnees-${new Date().toISOString().split('T')[0]}.json"`)
+    res.json(exportData)
+  } catch (error) {
+    res.status(500).json({ error: 'Erreur lors de l export' })
+  }
+})
+
+// Delete account and all data (RGPD - droit à l'effacement)
+app.delete('/api/users/:userId/gdpr/delete', authMiddleware, async (req: any, res) => {
+  try {
+    if (req.userId !== req.params.userId) {
+      return res.status(403).json({ error: 'Non autorise' })
+    }
+    const userId = req.params.userId
+
+    // Delete in order (respecting foreign key constraints)
+    await prisma.userBadge.deleteMany({ where: { userId } })
+    await prisma.medication.deleteMany({ where: { userId } })
+    await prisma.caregiver.deleteMany({ where: { userId } })
+    await prisma.pushSubscription.deleteMany({ where: { userId } })
+    await prisma.affiliate.deleteMany({ where: { userId } })
+    // Referral FK requires User rows, so delete the referrals where the user is involved
+    await prisma.referral.deleteMany({ where: { OR: [{ referrerId: userId }, { referredId: userId }] } })
+    await prisma.user.delete({ where: { id: userId } })
+
+    res.json({ success: true, message: 'Compte et toutes donnees supprimes definitivement.' })
+  } catch (error) {
+    console.error('GDPR delete error:', error)
+    res.status(500).json({ error: 'Erreur lors de la suppression' })
+  }
+})
+
+// Privacy policy (public)
+app.get('/api/privacy', (_req, res) => {
+  res.json({
+    version: '1.0',
+    updatedAt: '2026-01-01',
+    policy: {
+      controller: 'MediMemo',
+      purpose: 'Gestion de rappels de medicaments pour les particuliers et leurs aidants',
+      legalBasis: 'Consentement (RGPD Art. 6.1.a) + Interet legitime (RGPD Art. 6.1.f)',
+      dataCollected: [
+        'Email et nom (creation de compte)',
+        'Liste de medicaments (saisie par l utilisateur)',
+        'Numero de telephone des aidants (pour envoi de SMS)',
+        'Historique de prises (date, heure, medicament)',
+        'Tokens push (navigateur ou appareil)',
+        'Donnees de paiement (traitees par Stripe, non stockees)'
+      ],
+      retention: 'Les donnees sont conservees tant que le compte est actif. Suppression definitive dans les 30 jours suivant la demande.',
+      rights: [
+        'Droit d acces (Art. 15) - Export de vos donnees',
+        'Droit de rectification (Art. 16)',
+        'Droit a l effacement (Art. 17) - Suppression de compte',
+        'Droit a la limitation (Art. 18)',
+        'Droit a la portabilite (Art. 20)',
+        'Droit d opposition (Art. 21)'
+      ],
+      contact: 'rgpd@medimemo.fr',
+      dpo: 'DPO contactable a rgpd@medimemo.fr',
+      cnil: 'Vous pouvez introduire une reclamation aupres de la CNIL (www.cnil.fr)'
+    }
+  }) 
+})
+
+// === Cron endpoint to process email queue ===
+app.post('/api/cron/process-emails', async (_req, res) => {
+  try {
+    const result = await import('./email-sequences').then(m => m.processEmailQueue())
+    res.json({ success: true, ...result })
+  } catch (e) {
+    console.error('[cron] Email processing failed:', e)
+    res.status(500).json({ error: 'Failed' })
+  }
+})
+
+// === Admin dashboard ===
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'admin-medimemo-dev'
+
+function adminAuth(req: any, res: any, next: any) {
+  const auth = req.headers.authorization
+  if (!auth || auth !== `Bearer ${ADMIN_TOKEN}`) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  next()
+}
+
+app.get('/api/admin/metrics', adminAuth, async (_req, res) => {
+  try {
+    const [
+      totalUsers,
+      premiumUsers,
+      totalMeds,
+      totalCaregivers,
+      recentSignups,
+      emailQueuePending,
+      emailQueueSent,
+      revenueAgg,
+    ] = await Promise.all([
+      prisma.user.count(),
+      prisma.user.count({ where: { isPremium: true } }),
+      prisma.medication.count(),
+      prisma.caregiver.count(),
+      prisma.user.count({ where: { createdAt: { gte: new Date(Date.now() - 7 * 86400000) } } }),
+      prisma.emailQueue.count({ where: { sentAt: null } }),
+      prisma.emailQueue.count({ where: { sentAt: { not: null } } }),
+      prisma.user.count({ where: { isPremium: true } }),
+    ])
+
+    const conversionRate = totalUsers > 0 ? ((premiumUsers / totalUsers) * 100).toFixed(1) : '0'
+    const estimatedRevenue = premiumUsers * 59.99
+
+    res.json({
+      users: { total: totalUsers, premium: premiumUsers, free: totalUsers - premiumUsers, recentSignups },
+      content: { medications: totalMeds, caregivers: totalCaregivers },
+      revenue: {
+        estimatedMonthly: estimatedRevenue,
+        premiumUsers,
+        pricePerYear: 59.99,
+        conversionRate: `${conversionRate}%`,
+      },
+      emails: { pending: emailQueuePending, sent: emailQueueSent },
+    })
+  } catch (e) {
+    console.error('[admin] Metrics error:', e)
+    res.status(500).json({ error: 'Failed' })
+  }
+})
+
+app.get('/api/admin/users', adminAuth, async (req, res) => {
+  const page = Number(req.query.page) || 1
+  const limit = Math.min(Number(req.query.limit) || 50, 200)
+  const skip = (page - 1) * limit
+
+  const [users, total] = await Promise.all([
+    prisma.user.findMany({
+      select: {
+        id: true, email: true, name: true, isPremium: true,
+        premiumUntil: true, createdAt: true, loyaltyPoints: true, streakDays: true,
+        _count: { select: { medications: true, caregivers: true } }
+      },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit,
+    }),
+    prisma.user.count(),
+  ])
+
+  res.json({ users, total, page, totalPages: Math.ceil(total / limit) })
+})
+
+app.get('/api/admin/revenue', adminAuth, async (_req, res) => {
+  // Get monthly signups for chart
+  const users = await prisma.user.findMany({
+    select: { createdAt: true, isPremium: true },
+    orderBy: { createdAt: 'asc' },
+  })
+
+  const monthly: Record<string, { signups: number; premium: number }> = {}
+  for (const u of users) {
+    const key = u.createdAt.toISOString().slice(0, 7) // YYYY-MM
+    if (!monthly[key]) monthly[key] = { signups: 0, premium: 0 }
+    monthly[key].signups++
+    if (u.isPremium) monthly[key].premium++
+  }
+
+  res.json({
+    monthly: Object.entries(monthly).map(([month, data]) => ({ month, ...data })),
+    totalRevenue: users.filter(u => u.isPremium).length * 59.99,
+    avgRevenuePerUser: users.length > 0
+      ? (users.filter(u => u.isPremium).length * 59.99 / users.length).toFixed(2)
+      : 0,
+  })
+})
+
 export default app

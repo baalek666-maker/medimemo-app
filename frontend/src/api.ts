@@ -238,3 +238,29 @@ export async function updateStreak(token: string) {
   if (!res.ok) throw new Error('Failed to update streak')
   return res.json()
 }
+
+// === GDPR / RGPD ===
+export async function exportUserData(userId: string) {
+  const token = localStorage.getItem('medimemo_token') || ''
+  const res = await fetch(`${API_URL}/api/users/${userId}/gdpr/export`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) throw new Error('Failed to export user data')
+  return res.blob()
+}
+
+export async function deleteUserData(userId: string) {
+  const token = localStorage.getItem('medimemo_token') || ''
+  const res = await fetch(`${API_URL}/api/users/${userId}/gdpr/delete`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) throw new Error('Failed to delete user data')
+  return res.json()
+}
+
+export async function getPrivacyPolicy() {
+  const res = await fetch(`${API_URL}/api/privacy`)
+  if (!res.ok) throw new Error('Failed to load privacy policy')
+  return res.json()
+}

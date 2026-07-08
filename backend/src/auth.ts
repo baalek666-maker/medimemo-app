@@ -40,6 +40,12 @@ export async function signup(email: string, password: string, name?: string): Pr
     data: { email, passwordHash, name: name || email.split('@')[0] }
   })
   const token = signToken(user.id)
+
+  // Enroll in onboarding email sequence (fire and forget)
+  import('./email-sequences').then(m => {
+    m.enrollInSequence(user.id, user.email, user.name || user.email.split('@')[0], 'onboarding').catch(console.error)
+  }).catch(console.error)
+
   return {
     user: { id: user.id, email: user.email, name: user.name, isPremium: user.isPremium },
     token

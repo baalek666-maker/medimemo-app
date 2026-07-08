@@ -175,3 +175,18 @@ model NotificationLog {
 
   @@index([userId, scheduledFor])
 }
+
+model EmailQueue {
+  id           String    @id @default(cuid())
+  userId       String?
+  email        String
+  template     String
+  payload      String    // JSON
+  scheduledFor DateTime
+  sentAt       DateTime?
+  error        String?
+  attempts     Int       @default(0)
+  createdAt    DateTime  @default(now())
+
+  @@index([scheduledFor, sentAt])
+}
